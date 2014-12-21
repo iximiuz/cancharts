@@ -24,7 +24,8 @@ function sunburst(canvas, data) {
 
     var pickColor = (function() {
         var i = 0,
-            colors = ['blue', 'green', 'yellow', 'red', 'black', 'purple', 'orange', 'gray'];
+            colors = ['rgb(86, 135, 209)', 'rgb(123, 97, 92)', 'rgb(222, 120, 59)',
+                      'rgb(106, 185, 117)', 'rgb(161, 115, 209)', 'rgb(187, 187, 187)'];
 
         return function(nodeDatum) {
             return colors[i++ % colors.length];
@@ -38,7 +39,8 @@ function sunburst(canvas, data) {
             parent: parentMeta,
             width: parentMeta.width / scale,
             offset: parentMeta.offset + parentMeta.width,
-            children: []
+            children: [],
+            scale: parentMeta.scale / scale
         }, childSibling;
 
         meta.angles = {abs: parentMeta.angles.abs * childDatum.value / parentMeta.data.value};
@@ -62,7 +64,8 @@ function sunburst(canvas, data) {
                     angles: {begin: 0, end: 2 * Math.PI, abs: 2 * Math.PI},
                     width: startWidth,
                     offset: 0,
-                    children: []
+                    children: [],
+                    scale: 1
                 }
             },
             sibling;
@@ -110,7 +113,7 @@ function sunburst(canvas, data) {
     }
 
     function drawRootNodeLabel(nodeMeta, origin, ctx) {
-        ctx.font = '20px Verdana';
+        ctx.font = '30px Verdana';
         ctx.textAlign = 'center';
         ctx.fillStyle = 'white';
         ctx.fillText(nodeMeta.data.name, origin.x, origin.y);
@@ -119,8 +122,16 @@ function sunburst(canvas, data) {
     function drawChildNodeBody(nodeMeta, origin, ctx) {
         ctx.beginPath();
         ctx.arc(origin.x, origin.y, nodeMeta.offset + nodeMeta.width / 2, nodeMeta.angles.begin, nodeMeta.angles.end);
-
         ctx.lineWidth = nodeMeta.width;
+        ctx.strokeStyle = 'white';
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(
+            origin.x, origin.y, nodeMeta.offset + 1 + nodeMeta.width / 2,
+            nodeMeta.angles.begin + 0.005, nodeMeta.angles.end - 0.005
+        );
+        ctx.lineWidth = nodeMeta.width - 2;
         ctx.strokeStyle = nodeMeta.hover ? 'red' : nodeMeta.color;
         ctx.stroke();
     }
@@ -139,16 +150,19 @@ function sunburst(canvas, data) {
         ctx.save();
         ctx.translate(origin.x, origin.y);
         ctx.rotate(txtAngle);
-        ctx.font = '20px Verdana';
+        ctx.font = 30 * nodeMeta.scale + 'px Verdana';
         ctx.textAlign = 'center';
         ctx.fillStyle = 'white';
+        // todo: adjust Y pos using font line-height prop and known arc length.
         ctx.fillText(nodeMeta.data.name, xScale * (nodeMeta.offset + nodeMeta.width / 2), 0, nodeMeta.width);
         ctx.restore();
     }
 
-    function drawSunburst(meta, origin, ctx) {
-        drawNode(meta.root, origin, ctx);                             // draw bodies
-        drawNode(meta.root, origin, ctx, {body: false, label: true}); // draw labels;
+    function drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx) {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        drawNode(metaData.root, origin, ctx);                             // draw bodies
+        drawNode(metaData.root, origin, ctx, {body: false, label: true}); // draw labels;
     }
 
     function getNodeByCartesianCoords(point, origin, metaData) {
@@ -207,14 +221,16 @@ function sunburst(canvas, data) {
     var canvasRect = canvas.getBoundingClientRect(),
         canvasWidth = canvas.width,
         canvasHeight = canvas.height,
+        widthScale = 1.62,
         ctx = canvas.getContext('2d'),
         origin = {x: canvasWidth / 2, y: canvasHeight / 2},
-        metaData = calcMetaData(data, 1.62),
+        metaData = calcMetaData(data, widthScale),
+        metaDataFull = metaData,
         throttleTimeout,
         prevHoveredNodeMeta,
         hoveredNodeMeta;
 
-    drawSunburst(metaData, origin, ctx);
+    drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx);
 
     canvas.addEventListener('mousemove', function(event) {
         clearTimeout(throttleTimeout);
@@ -234,8 +250,44 @@ function sunburst(canvas, data) {
             }
 
             prevHoveredNodeMeta = hoveredNodeMeta;
-        }, 25);
+        }, 15);
 
+    }, false);
+
+    canvas.addEventListener('click', function(event) {
+        var pointerPos = getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight),
+            targetNodeMeta = getNodeByCartesianCoords(pointerPos, origin, metaData),
+            targetNode;
+
+        if (targetNodeMeta) {
+            var findParent = function(currentData, tree) {
+                var parent;
+                for (var i = 0, l = (tree.children || []).length; i < l; i++) {
+                    if (tree.children[i] === currentData) {
+                        return tree;
+                    }
+
+                    if (parent = findParent(currentData, tree.children[i])) {
+                        return parent;
+                    }
+                }
+
+                return null;
+            };
+
+            targetNode = targetNodeMeta.parent
+                ? targetNodeMeta.data
+                : findParent(targetNodeMeta.data, data);
+        }
+
+        if (targetNode) {
+            clearTimeout(throttleTimeout);
+            prevHoveredNodeMeta = null;
+            hoveredNodeMeta = null;
+
+            metaData = calcMetaData(targetNode, widthScale);
+            drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx);
+        }
     }, false);
 }
 
@@ -274,7 +326,17 @@ var data = {
         },
         {
             name: 'trip',
-            value: 2 * 60 * 60
+            value: 2 * 60 * 60,
+            children: [
+                {
+                    name: 'subway',
+                    value: 80 * 60
+                },
+                {
+                    name: 'walking',
+                    value: 40 * 60
+                }
+            ]
         },
         {
             name: 'food',
