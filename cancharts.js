@@ -1,115 +1,108 @@
 'use strict';
 
+function Sunburst(canvas, data, options) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.canvasRect = canvas.getBoundingClientRect();
+    this.canvasWidth = canvas.width;
+    this.canvasHeight = canvas.height;
+    this.origin = {x: this.canvasWidth / 2, y: this.canvasHeight / 2};
 
-function sunburst(canvas, data, options) {
-    function deep(data) {
-        var deeps = [];
-        for (var i = 0, l = (data.children || []).length; i < l; i++) {
-            deeps.push(deep(data.children[i]));
-        }
+    this.data = data;
 
-        return 1 + Math.max.apply(Math, deeps.length ? deeps : [0]);
-    }
+    this.options = options || {};
+    this.options.widthScale = this.options.widthScale || 1.62;
 
-    function rootNodeWidth(canvas, data, scale) {
-        var canvasSize = Math.min(canvas.width, canvas.height), div = 1;
+    var throttleTimeout, self = this, prevTargetNodeMeta;
 
-        scale = scale || 1.62;
-        for (var i = 1, d = deep(data); i < d; i++) {
-             div += 1 / Math.pow(scale, i);
-        }
+    this.onMouseMove = function(event) {
+        clearTimeout(throttleTimeout);
 
-        return canvasSize / 2 / div;
-    }
+        throttleTimeout = setTimeout(function() {
+            var targetNodeMeta = self.getNodeByCartesianCoords(self.getCanvasPointerPos(event));
+            if (targetNodeMeta === prevTargetNodeMeta) {
+                return;
+            }
 
-    var pickColor = (function() {
-        var i = 0,
-            colors = ['rgb(86, 135, 209)', 'rgb(123, 97, 92)', 'rgb(222, 120, 59)',
-                      'rgb(106, 185, 117)', 'rgb(161, 115, 209)', 'rgb(187, 187, 187)'];
+            if (targetNodeMeta) {
+                options.hoverPath
+                    ? self.hoverPath(targetNodeMeta)
+                    : self.hoverNode(targetNodeMeta);
+            }
 
-        return function(nodeDatum) {
-            return colors[i++ % colors.length];
-        }
-    })();
+            prevTargetNodeMeta = targetNodeMeta;
+        }, 15);
+    };
 
-    function calcChildMetaData(childDatum, parentMeta, sibling, scale) {
-        var meta = {
-            data: childDatum,
-            color: pickColor(childDatum),
-            parent: parentMeta,
-            width: parentMeta.width / scale,
-            offset: parentMeta.offset + parentMeta.width,
-            children: [],
-            scale: parentMeta.scale / scale
-        }, childSibling;
+    this.onClick = function(event) {
+        var targetNodeMeta = self.getNodeByCartesianCoords(self.getCanvasPointerPos(event)),
+            targetNode;
 
-        meta.angles = {abs: parentMeta.angles.abs * childDatum.value / parentMeta.data.value};
-        meta.angles.begin = sibling ? sibling.angles.end : parentMeta.angles.begin;
-        meta.angles.end = meta.angles.begin + meta.angles.abs;
+        if (targetNodeMeta) {
+            var findParent = function(currentData, tree) {
+                var parent;
+                for (var i = 0, l = (tree.children || []).length; i < l; i++) {
+                    if (tree.children[i] === currentData) {
+                        return tree;
+                    }
 
-        for (var i = 0, l = (childDatum.children || []).length; i < l; i++) {
-            childSibling = calcChildMetaData(childDatum.children[i], meta, childSibling, scale);
-            meta.children.push(childSibling);
-        }
-
-        return meta;
-    }
-
-    function calcMetaData(rootDatum, scale) {
-        var startWidth = rootNodeWidth(canvas, rootDatum, scale),
-            meta = {
-                root: {
-                    data: rootDatum,
-                    color: pickColor(rootDatum),
-                    angles: {begin: 0, end: 2 * Math.PI, abs: 2 * Math.PI},
-                    width: startWidth,
-                    offset: 0,
-                    children: [],
-                    scale: 1
+                    if (parent = findParent(currentData, tree.children[i])) {
+                        return parent;
+                    }
                 }
-            },
-            sibling;
 
-        for (var i = 0, l = (rootDatum.children || []).length; i < l; i++) {
-            if (rootDatum.children[i].value > rootDatum.value) {
-                console.error('Child value greater than parent value.', rootDatum.children[i], rootDatum);
-                continue;
-            }
+                return null;
+            };
 
-            sibling = calcChildMetaData(rootDatum.children[i], meta.root, sibling, scale);
-            meta.root.children.push(sibling);
+            targetNode = targetNodeMeta.parent
+                ? targetNodeMeta.data
+                : findParent(targetNodeMeta.data, self.data);
         }
 
-        return meta;
+        if (targetNode) {
+            clearTimeout(throttleTimeout);
+
+            self.render(targetNode);
+        }
+    };
+
+    this.canvas.addEventListener('mousemove', this.onMouseMove, false);
+    this.canvas.addEventListener('click', this.onClick, false);
+}
+
+Sunburst.prototype.deep = function(data) {
+    var deeps = [];
+    for (var i = 0, l = (data.children || []).length; i < l; i++) {
+        deeps.push(this.deep(data.children[i]));
     }
 
-    function drawNode(nodeMeta, origin, ctx, options) {
-        options = options || {};
+    return 1 + Math.max.apply(Math, deeps.length ? deeps : [0]);
+};
 
-        if (options.body || undefined === options.body) {
-            nodeMeta.parent
-                ? drawChildNodeBody(nodeMeta, origin, ctx)
-                : drawRootNodeBody(nodeMeta, origin, ctx);
-        }
+Sunburst.prototype.render = function(rootNode) {
+    this.rootNode = rootNode || this.rootNode || this.data;
 
-        if (options.label) {
-            nodeMeta.parent
-                ? drawChildNodeLabel(nodeMeta, origin, ctx)
-                : drawRootNodeLabel(nodeMeta, origin, ctx);
-        }
+    this.calcMetaData();
+    this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
 
-        if (options.children || undefined == options.children) {
-            for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
-                drawNode(nodeMeta.children[i], origin, ctx, options);
-            }
-        }
+    this.drawNode(this.metaData.root);                             // draw bodies
+    this.drawNode(this.metaData.root, {body: false, label: true}); // draw labels;
+
+    if (this.options.onHover) {
+        this.options.onHover();
     }
+};
 
+Sunburst.prototype.drawNode = function(nodeMeta, options) {
     function drawRootNodeBody(nodeMeta, origin, ctx) {
         ctx.beginPath();
         ctx.arc(origin.x, origin.y, nodeMeta.width, nodeMeta.angles.begin, nodeMeta.angles.end);
+
         ctx.fillStyle = nodeMeta.hover ? 'red' : nodeMeta.color;
         ctx.fill();
+
+        ctx.strokeStyle = 'white';
+        ctx.stroke();
     }
 
     function drawRootNodeLabel(nodeMeta, origin, ctx) {
@@ -121,18 +114,23 @@ function sunburst(canvas, data, options) {
 
     function drawChildNodeBody(nodeMeta, origin, ctx) {
         ctx.beginPath();
-        ctx.arc(origin.x, origin.y, nodeMeta.offset + nodeMeta.width / 2, nodeMeta.angles.begin, nodeMeta.angles.end);
-        ctx.lineWidth = nodeMeta.width;
-        ctx.strokeStyle = 'white';
-        ctx.stroke();
 
-        ctx.beginPath();
-        ctx.arc(
-            origin.x, origin.y, nodeMeta.offset + 1 + nodeMeta.width / 2,
-            nodeMeta.angles.begin + 0.005, nodeMeta.angles.end - 0.005
-        );
-        ctx.lineWidth = nodeMeta.width - 2;
-        ctx.strokeStyle = nodeMeta.hover ? 'red' : nodeMeta.color;
+        ctx.arc(origin.x, origin.y, nodeMeta.offset, nodeMeta.angles.begin, nodeMeta.angles.end);
+
+        ctx.save();
+        ctx.translate(origin.x, origin.y);
+        ctx.rotate(nodeMeta.angles.end);
+        ctx.lineTo(nodeMeta.offset + nodeMeta.width, 0);
+        ctx.restore();
+
+        ctx.arc(origin.x, origin.y, nodeMeta.offset + nodeMeta.width, nodeMeta.angles.end, nodeMeta.angles.begin, true);
+
+        ctx.closePath();
+
+        ctx.fillStyle = nodeMeta.hover ? 'red' : nodeMeta.color;
+        ctx.fill();
+
+        ctx.strokeStyle = 'white';
         ctx.stroke();
     }
 
@@ -158,280 +156,197 @@ function sunburst(canvas, data, options) {
         ctx.restore();
     }
 
-    function drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx) {
-        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    options = options || {};
 
-        drawNode(metaData.root, origin, ctx);                             // draw bodies
-        drawNode(metaData.root, origin, ctx, {body: false, label: true}); // draw labels;
+    if (options.body || undefined === options.body) {
+        nodeMeta.parent
+            ? drawChildNodeBody(nodeMeta, this.origin, this.ctx)
+            : drawRootNodeBody(nodeMeta, this.origin, this.ctx);
     }
 
-    function getNodeByCartesianCoords(point, origin, metaData) {
-        var difX = point.x - origin.x,
-            difY = point.y - origin.y,
-            distance = Math.sqrt(difX * difX + difY * difY),
-            angle = Math.acos(difX / distance);
+    if (options.label) {
+        nodeMeta.parent
+            ? drawChildNodeLabel(nodeMeta, this.origin, this.ctx)
+            : drawRootNodeLabel(nodeMeta, this.origin, this.ctx);
+    }
 
-        if (difY < 0) {
-            angle = 2 * Math.PI - angle;
+    if (options.children || undefined == options.children) {
+        for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
+            this.drawNode(nodeMeta.children[i], options);
+        }
+    }
+};
+
+Sunburst.prototype.pickColor = (function() {
+    var i = 0,
+        colors = ['rgb(86, 135, 209)', 'rgb(123, 97, 92)', 'rgb(222, 120, 59)',
+            'rgb(106, 185, 117)', 'rgb(161, 115, 209)', 'rgb(187, 187, 187)'];
+
+    return function(nodeDatum) {
+        return colors[i++ % colors.length];
+    }
+})();
+
+Sunburst.prototype.rootNodeWidth = function(rootNode) {
+    var canvasSize = Math.min(this.canvasWidth, this.canvasHeight), div = 1;
+
+    for (var i = 1, d = this.deep(rootNode); i < d; i++) {
+        div += 1 / Math.pow(this.options.widthScale, i);
+    }
+
+    return canvasSize / 2 / div;
+};
+
+Sunburst.prototype.calcMetaData = function() {
+    var startWidth = this.rootNodeWidth(this.rootNode),
+        meta = {
+            root: {
+                data: this.rootNode,
+                color: this.pickColor(this.rootNode),
+                angles: {begin: 0, end: 2 * Math.PI, abs: 2 * Math.PI},
+                width: startWidth,
+                offset: 0,
+                children: [],
+                scale: 1
+            }
+        },
+        sibling, self = this;
+
+    function calcChildMetaData(childDatum, parentMeta, sibling, scale) {
+        var meta = {
+            data: childDatum,
+            color: self.pickColor(childDatum),
+            parent: parentMeta,
+            width: parentMeta.width / scale,
+            offset: parentMeta.offset + parentMeta.width,
+            children: [],
+            scale: parentMeta.scale / scale
+        }, childSibling;
+
+        meta.angles = {abs: parentMeta.angles.abs * childDatum.value / parentMeta.data.value};
+        meta.angles.begin = sibling ? sibling.angles.end : parentMeta.angles.begin;
+        meta.angles.end = meta.angles.begin + meta.angles.abs;
+
+        for (var i = 0, l = (childDatum.children || []).length; i < l; i++) {
+            childSibling = calcChildMetaData(childDatum.children[i], meta, childSibling, scale);
+            meta.children.push(childSibling);
         }
 
-        return getNodeByPolarCoords({dist: distance, angle: angle}, metaData);
+        return meta;
     }
 
-    function getNodeByPolarCoords(point, metaData) {
-        // todo: make index by origin offset and angle and use it instead of plain search
+    for (var i = 0, l = (this.rootNode.children || []).length; i < l; i++) {
+        if (this.rootNode.children[i].value > this.rootNode.value) {
+            console.error('Child value greater than parent value.', this.rootNode.children[i], this.rootNode);
+            continue;
+        }
 
-        function _findNode(point, nodeMeta) {
-            // first check current node
-            if (nodeMeta.offset >= point.dist) {
-                // too far from origin to be our goal
-                return null;
-            }
+        sibling = calcChildMetaData(this.rootNode.children[i], meta.root, sibling, this.options.widthScale);
+        meta.root.children.push(sibling);
+    }
 
-            if (nodeMeta.offset < point.dist && point.dist <= nodeMeta.offset + nodeMeta.width) {
-                // level found. Checking angle
-                if (nodeMeta.angles.begin < point.angle && point.angle <= nodeMeta.angles.end) {
-                    return nodeMeta;
-                }
-            } else {
-                // we need to go deeper. Searching in children
-                var node;
-                for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
-                    if (node = _findNode(point, nodeMeta.children[i])) {
-                        return node;
-                    }
-                }
-            }
+    this.metaData = meta;
+};
 
+Sunburst.prototype.getNodeByCartesianCoords = function(point) {
+    var difX = point.x - this.origin.x,
+        difY = point.y - this.origin.y,
+        distance = Math.sqrt(difX * difX + difY * difY),
+        angle = Math.acos(difX / distance);
+
+    if (difY < 0) {
+        angle = 2 * Math.PI - angle;
+    }
+
+    return this.getNodeByPolarCoords({dist: distance, angle: angle}, this.metaData);
+};
+
+Sunburst.prototype.getNodeByPolarCoords = function(point) {
+    // todo: make index by origin offset and angle and use it instead of plain search
+
+    function _findNode(point, nodeMeta) {
+        // first check current node
+        if (nodeMeta.offset >= point.dist) {
+            // too far from origin to be our goal
             return null;
         }
 
-        return _findNode(point, metaData.root);
-    }
-
-    function getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight) {
-        return {
-            x: Math.round((event.clientX - canvasRect.left) / (canvasRect.right - canvasRect.left) * canvasWidth),
-            y: Math.round((event.clientY - canvasRect.top) / (canvasRect.bottom - canvasRect.top) * canvasHeight)
-        };
-    }
-
-    function hoverNode(targetNodeMeta, metaData, preservePath, fnOnHover) {
-        if ('function' === typeof preservePath) {
-            fnOnHover = preservePath;
-            preservePath = false;
-        }
-
-        if (metaData.hoveredPath && !preservePath) {
-            hoverPath(null, metaData, true);
-        }
-
-        if (metaData.hoveredNodeMeta && metaData.hoveredNodeMeta !== targetNodeMeta) {
-            metaData.hoveredNodeMeta.hover = false;
-            drawNode(metaData.hoveredNodeMeta, origin, ctx, {label: true, children: false})
-        }
-
-        if (targetNodeMeta && metaData.hoveredNodeMeta !== targetNodeMeta) {
-            metaData.hoveredNodeMeta = targetNodeMeta;
-            metaData.hoveredNodeMeta.hover = true;
-            drawNode(metaData.hoveredNodeMeta, origin, ctx, {label: true, children: false})
-        }
-
-        if (metaData.hoveredNodeMeta && fnOnHover) {
-            fnOnHover(metaData.hoveredNodeMeta);
-        }
-    }
-
-    function hoverPath(targetNodeMeta, metaData, preserveNode, fnOnHover) {
-        if ('function' === typeof preserveNode) {
-            fnOnHover = preserveNode;
-            preserveNode = false;
-        }
-
-        if (metaData.hoveredNodeMeta && !preserveNode) {
-            hoverNode(null, metaData, true);
-        }
-
-        if (metaData.hoveredPath) {
-            var prevHovered = metaData.hoveredPath.pop();
-            while (prevHovered) {
-                prevHovered.hover = false;
-                drawNode(prevHovered, origin, ctx, {label: true, children: false});
-
-                prevHovered = metaData.hoveredPath.pop();
+        if (nodeMeta.offset < point.dist && point.dist <= nodeMeta.offset + nodeMeta.width) {
+            // level found. Checking angle
+            if (nodeMeta.angles.begin < point.angle && point.angle <= nodeMeta.angles.end) {
+                return nodeMeta;
+            }
+        } else {
+            // we need to go deeper. Searching in children
+            var node;
+            for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
+                if (node = _findNode(point, nodeMeta.children[i])) {
+                    return node;
+                }
             }
         }
 
-        metaData.hoveredPath = [];
-        while (targetNodeMeta) {
-            targetNodeMeta.hover = true;
-            drawNode(targetNodeMeta, origin, ctx, {label: true, children: false});
-            metaData.hoveredPath.push(targetNodeMeta);
+        return null;
+    }
 
-            targetNodeMeta = targetNodeMeta.parent;
-        }
+    return _findNode(point, this.metaData.root);
+};
 
-        if (metaData.hoveredPath.length && fnOnHover) {
-            fnOnHover(metaData.hoveredPath);
+Sunburst.prototype.getCanvasPointerPos = function(event) {
+    return {
+        x: Math.round((event.clientX + document.body.scrollLeft - this.canvasRect.left)
+            / (this.canvasRect.right - this.canvasRect.left) * this.canvasWidth),
+        y: Math.round((event.clientY + document.body.scrollTop - this.canvasRect.top)
+            / (this.canvasRect.bottom - this.canvasRect.top) * this.canvasHeight)
+    };
+};
+
+Sunburst.prototype.hoverPath = function(targetNodeMeta, preserveNode) {
+    if (this.metaData.hoveredNodeMeta && !preserveNode) {
+        this.hoverNode(null, true);
+    }
+
+    if (this.metaData.hoveredPath) {
+        var prevHovered = this.metaData.hoveredPath.pop();
+        while (prevHovered) {
+            prevHovered.hover = false;
+            this.drawNode(prevHovered, {label: true, children: false});
+
+            prevHovered = this.metaData.hoveredPath.pop();
         }
     }
 
-    // start
-    var canvasRect = canvas.getBoundingClientRect(),
-        canvasWidth = canvas.width,
-        canvasHeight = canvas.height,
-        widthScale = 1.62,
-        ctx = canvas.getContext('2d'),
-        origin = {x: canvasWidth / 2, y: canvasHeight / 2},
-        metaData = calcMetaData(data, widthScale),
-        throttleTimeout;
+    this.metaData.hoveredPath = [];
+    while (targetNodeMeta) {
+        targetNodeMeta.hover = true;
+        this.drawNode(targetNodeMeta, {label: true, children: false});
+        this.metaData.hoveredPath.push(targetNodeMeta);
 
-    options = options || {};
+        targetNodeMeta = targetNodeMeta.parent;
+    }
 
-    drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx);
-
-    canvas.addEventListener('mousemove', function(event) {
-        clearTimeout(throttleTimeout);
-
-        throttleTimeout = setTimeout(function() {
-            var pointerPos = getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight),
-                targetNodeMeta = getNodeByCartesianCoords(pointerPos, origin, metaData);
-                if (targetNodeMeta) {
-                    if (options.hoverPath) {
-                        hoverPath(targetNodeMeta, metaData, options.onHover);
-                    } else {
-                        hoverNode(targetNodeMeta, metaData, options.onHover);
-                    }
-                }
-        }, 15);
-
-    }, false);
-
-    canvas.addEventListener('click', function(event) {
-        var pointerPos = getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight),
-            targetNodeMeta = getNodeByCartesianCoords(pointerPos, origin, metaData),
-            targetNode;
-
-        if (targetNodeMeta) {
-            var findParent = function(currentData, tree) {
-                var parent;
-                for (var i = 0, l = (tree.children || []).length; i < l; i++) {
-                    if (tree.children[i] === currentData) {
-                        return tree;
-                    }
-
-                    if (parent = findParent(currentData, tree.children[i])) {
-                        return parent;
-                    }
-                }
-
-                return null;
-            };
-
-            targetNode = targetNodeMeta.parent
-                ? targetNodeMeta.data
-                : findParent(targetNodeMeta.data, data);
-        }
-
-        if (targetNode) {
-            clearTimeout(throttleTimeout);
-
-            metaData = calcMetaData(targetNode, widthScale);
-            drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx);
-        }
-    }, false);
-}
-
-
-var data = {
-    name: 'day',
-    value: 24 * 60 * 60,
-    children: [
-        {
-            name: 'work',
-            value: 9 * 60 * 60,
-            children: [
-                {
-                    name: 'coding',
-                    value: 6 * 60 * 60,
-                    children: [
-                        {
-                            name: 'python',
-                            value: 4 * 60 * 60
-                        },
-                        {
-                            name: 'js',
-                            value: 2 * 60 * 60
-                        }
-                    ]
-                },
-                {
-                    name: 'communicate',
-                    value: 1.5 * 60 * 60
-                }
-            ]
-        },
-        {
-            name: 'sleep',
-            value: 7 * 60 * 60
-        },
-        {
-            name: 'trip',
-            value: 2 * 60 * 60,
-            children: [
-                {
-                    name: 'subway',
-                    value: 80 * 60
-                },
-                {
-                    name: 'walking',
-                    value: 40 * 60
-                }
-            ]
-        },
-        {
-            name: 'food',
-            value: 2 * 60 * 60
-        },
-        {
-            name: 'reading',
-            value: 40 * 60
-        }
-    ]
-};
-
-
-var options = {
-    onHover: function(target) {
-        if (!Array.isArray(target)) {
-            target = [target];
-        }
-
-        var container = document.getElementById('hovered'),
-            addButton = document.getElementById('add-node-button'),
-            html = '';
-
-        for (var i = target.length - 1; i >= 0; i--) {
-            html += '<div class="hovered-node" style="background-color:' + target[i].color + '">' +
-                target[i].data.name +
-            '</div>' +
-            '<div class="hovered-node hovered-node-remove" style="background-color:' + target[i].color + '">' +
-                'x' +
-            '</div>';
-        }
-
-        container.innerHTML = html;
-        addButton.innerHTML = 'Add to "' + target[0].data.name + '"';
-
-        document.getElementById('add-node-block').style.display = 'block';
+    if (this.metaData.hoveredPath.length && this.options.onHover) {
+        this.options.onHover(this.metaData.hoveredPath);
     }
 };
-sunburst(document.getElementById('canvas'), data, options);
 
-document.getElementById('hover-path-switch').addEventListener('click', function(event) {
-    options.hoverPath = event.target.checked;
-}, false);
+Sunburst.prototype.hoverNode = function(targetNodeMeta, preservePath) {
+    if (this.metaData.hoveredPath && !preservePath) {
+        this.hoverPath(null, true);
+    }
 
-document.getElementById('add-node-button').addEventListener('click', function(event) {
+    if (this.metaData.hoveredNodeMeta && this.metaData.hoveredNodeMeta !== targetNodeMeta) {
+        this.metaData.hoveredNodeMeta.hover = false;
+        this.drawNode(this.metaData.hoveredNodeMeta, {label: true, children: false})
+    }
 
-}, false);
+    if (targetNodeMeta && this.metaData.hoveredNodeMeta !== targetNodeMeta) {
+        this.metaData.hoveredNodeMeta = targetNodeMeta;
+        this.metaData.hoveredNodeMeta.hover = true;
+        this.drawNode(this.metaData.hoveredNodeMeta, {label: true, children: false})
+    }
+
+    if (this.metaData.hoveredNodeMeta && this.options.onHover) {
+        this.options.onHover(this.metaData.hoveredNodeMeta);
+    }
+};

@@ -5,8 +5,11 @@
     <title>CanCharts</title>
 
     <link href="styles.css" rel="stylesheet" />
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
 </head>
-<body>
+<body onload="demo()">
+    <h1 class="example-header">Daily time distribution sunburst example</h1>
+
     <canvas id="canvas" width="800" height="600" class="canvas"></canvas>
 
     <div>
@@ -20,15 +23,16 @@
 
         <div class="add-node-block" id="add-node-block" style="display: none;">
             <label>
-                Name <input type="text" name="name">
+                Name <input type="text" id="work-name">
             </label>
             <label>
-                Minutes <input type="number" name="minutes">
+                Minutes <input type="number" id="work-minutes" min="10">
             </label>
             <button class="add-node-button" id="add-node-button"></button>
         </div>
     </div>
 
     <script src="cancharts.js"></script>
+    <script src="demo.js"></script>
 </body>
 </html>
