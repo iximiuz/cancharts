@@ -34,10 +34,10 @@ function sunburst(canvas, data) {
     function calcChildMetaData(childDatum, parentMeta, sibling, scale) {
         var meta = {
             data: childDatum,
+            color: pickColor(childDatum),
             parent: parentMeta,
             width: parentMeta.width / scale,
             offset: parentMeta.offset + parentMeta.width,
-            color: pickColor(childDatum),
             children: []
         }, childSibling;
 
@@ -80,15 +80,23 @@ function sunburst(canvas, data) {
         return meta;
     }
 
-    function drawRootNode(nodeMeta, x, y, ctx, options) {
+    function drawNode(nodeMeta, x, y, ctx, options) {
         options = options || {};
 
         if (options.body || undefined === options.body) {
-            drawRootNodeBody(nodeMeta, x, y, ctx);
+            nodeMeta.parent
+                ? drawChildNodeBody(nodeMeta, x, y, ctx)
+                : drawRootNodeBody(nodeMeta, x, y, ctx);
         }
 
         if (options.label) {
-            drawRootNodeLabel(nodeMeta, x, y, ctx);
+            nodeMeta.parent
+                ? drawChildNodeLabel(nodeMeta, x, y, ctx)
+                : drawRootNodeLabel(nodeMeta, x, y, ctx);
+        }
+
+        for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
+            drawNode(nodeMeta.children[i], x, y, ctx, options);
         }
     }
 
@@ -100,25 +108,10 @@ function sunburst(canvas, data) {
     }
 
     function drawRootNodeLabel(nodeMeta, x, y, ctx) {
-        ctx.fillStyle = 'darkgray';
+        ctx.font = '20px Verdana';
         ctx.textAlign = 'center';
+        ctx.fillStyle = 'white';
         ctx.fillText(nodeMeta.data.name, x, y);
-    }
-
-    function drawChildNode(nodeMeta, x, y, ctx, options) {
-        options = options || {};
-
-        if (options.body || undefined === options.body) {
-            drawChildNodeBody(nodeMeta, x, y, ctx);
-        }
-
-        if (options.label) {
-            drawChildNodeLabel(nodeMeta, x, y, ctx);
-        }
-
-        for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
-            drawChildNode(nodeMeta.children[i], x, y, ctx, options);
-        }
     }
 
     function drawChildNodeBody(nodeMeta, x, y, ctx) {
@@ -144,8 +137,9 @@ function sunburst(canvas, data) {
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(txtAngle);
-        ctx.fillStyle = 'darkgray';
+        ctx.font = '20px Verdana';
         ctx.textAlign = 'center';
+        ctx.fillStyle = 'white';
         ctx.fillText(nodeMeta.data.name, xScale * (nodeMeta.offset + nodeMeta.width / 2), 0, nodeMeta.width);
         ctx.restore();
     }
@@ -157,21 +151,8 @@ function sunburst(canvas, data) {
         //     2.2. for each child of child draw it
         //     2.3. draw remind time as unknown
 
-        var i, l;
-
-        ctx.font = '20px Verdana';
-
-        // draw bodies
-        drawRootNode(meta.root, x, y, ctx);
-        for (i = 0, l = (meta.root.children || []).length; i < l; i++) {
-            drawChildNode(meta.root.children[i], x, y, ctx);
-        }
-
-        // draw labels
-        drawRootNode(meta.root, x, y, ctx, {body: false, label: true});
-        for (i = 0, l = (meta.root.children || []).length; i < l; i++) {
-            drawChildNode(meta.root.children[i], x, y, ctx, {body: false, label: true});
-        }
+        drawNode(meta.root, x, y, ctx);                             // draw bodies
+        drawNode(meta.root, x, y, ctx, {body: false, label: true}); // draw labels;
     }
 
     drawSunburst(calcMetaData(data, 1.62), canvas.width / 2, canvas.height / 2, canvas.getContext('2d'));
