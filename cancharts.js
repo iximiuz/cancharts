@@ -31,7 +31,7 @@ function Sunburst(canvas, data, options) {
             }
 
             prevTargetNodeMeta = targetNodeMeta;
-        }, 15);
+        }, 5);
     };
 
     this.onClick = function(event) {
