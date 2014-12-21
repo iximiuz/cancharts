@@ -80,30 +80,74 @@ function sunburst(canvas, data) {
         return meta;
     }
 
-    function drawRootNode(nodeMeta, x, y, ctx) {
+    function drawRootNode(nodeMeta, x, y, ctx, options) {
+        options = options || {};
+
+        if (options.body || undefined === options.body) {
+            drawRootNodeBody(nodeMeta, x, y, ctx);
+        }
+
+        if (options.label) {
+            drawRootNodeLabel(nodeMeta, x, y, ctx);
+        }
+    }
+
+    function drawRootNodeBody(nodeMeta, x, y, ctx) {
         ctx.arc(x, y, nodeMeta.width, nodeMeta.angles.begin, nodeMeta.angles.end);
         ctx.fillStyle = nodeMeta.color;
         ctx.fill();
         ctx.stroke();
-
-        // todo: add label using rootNodeDatum.name
     }
 
-    function drawChildNode(nodeMeta, x, y, ctx) {
-        console.log(nodeMeta);
+    function drawRootNodeLabel(nodeMeta, x, y, ctx) {
+        ctx.fillStyle = 'darkgray';
+        ctx.textAlign = 'center';
+        ctx.fillText(nodeMeta.data.name, x, y);
+    }
 
+    function drawChildNode(nodeMeta, x, y, ctx, options) {
+        options = options || {};
+
+        if (options.body || undefined === options.body) {
+            drawChildNodeBody(nodeMeta, x, y, ctx);
+        }
+
+        if (options.label) {
+            drawChildNodeLabel(nodeMeta, x, y, ctx);
+        }
+
+        for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
+            drawChildNode(nodeMeta.children[i], x, y, ctx, options);
+        }
+    }
+
+    function drawChildNodeBody(nodeMeta, x, y, ctx) {
         ctx.beginPath();
         ctx.arc(x, y, nodeMeta.offset + nodeMeta.width / 2, nodeMeta.angles.begin, nodeMeta.angles.end);
 
         ctx.lineWidth = nodeMeta.width;
         ctx.strokeStyle = nodeMeta.color;
         ctx.stroke();
+    }
 
-        // todo: add label using rootNodeDatum.name
-
-        for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
-            drawChildNode(nodeMeta.children[i], x, y, ctx);
+    function drawChildNodeLabel(nodeMeta, x, y, ctx) {
+        var txtAngle = nodeMeta.angles.begin + nodeMeta.angles.abs / 2,
+            xScale = 1;
+        if (Math.PI / 2 < txtAngle && txtAngle <= Math.PI) {
+            txtAngle += Math.PI;
+            xScale = -1;
+        } else if (Math.PI < txtAngle && txtAngle <= 3 * Math.PI / 2) {
+            txtAngle -= Math.PI;
+            xScale = -1;
         }
+
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(txtAngle);
+        ctx.fillStyle = 'darkgray';
+        ctx.textAlign = 'center';
+        ctx.fillText(nodeMeta.data.name, xScale * (nodeMeta.offset + nodeMeta.width / 2), 0, nodeMeta.width);
+        ctx.restore();
     }
 
     function drawSunburst(meta, x, y, ctx) {
@@ -113,9 +157,20 @@ function sunburst(canvas, data) {
         //     2.2. for each child of child draw it
         //     2.3. draw remind time as unknown
 
+        var i, l;
+
+        ctx.font = '20px Verdana';
+
+        // draw bodies
         drawRootNode(meta.root, x, y, ctx);
-        for (var i = 0, l = (meta.root.children || []).length; i < l; i++) {
+        for (i = 0, l = (meta.root.children || []).length; i < l; i++) {
             drawChildNode(meta.root.children[i], x, y, ctx);
+        }
+
+        // draw labels
+        drawRootNode(meta.root, x, y, ctx, {body: false, label: true});
+        for (i = 0, l = (meta.root.children || []).length; i < l; i++) {
+            drawChildNode(meta.root.children[i], x, y, ctx, {body: false, label: true});
         }
     }
 
@@ -133,7 +188,17 @@ var data = {
             children: [
                 {
                     name: 'coding',
-                    value: 6 * 60 * 60
+                    value: 6 * 60 * 60,
+                    children: [
+                        {
+                            name: 'python',
+                            value: 4 * 60 * 60
+                        },
+                        {
+                            name: 'js',
+                            value: 2 * 60 * 60
+                        }
+                    ]
                 },
                 {
                     name: 'communicate',
