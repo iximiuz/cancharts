@@ -1,7 +1,7 @@
 'use strict';
 
 
-function sunburst(canvas, data) {
+function sunburst(canvas, data, options) {
     function deep(data) {
         var deeps = [];
         for (var i = 0, l = (data.children || []).length; i < l; i++) {
@@ -216,6 +216,65 @@ function sunburst(canvas, data) {
         };
     }
 
+    function hoverNode(targetNodeMeta, metaData, preservePath, fnOnHover) {
+        if ('function' === typeof preservePath) {
+            fnOnHover = preservePath;
+            preservePath = false;
+        }
+
+        if (metaData.hoveredPath && !preservePath) {
+            hoverPath(null, metaData, true);
+        }
+
+        if (metaData.hoveredNodeMeta && metaData.hoveredNodeMeta !== targetNodeMeta) {
+            metaData.hoveredNodeMeta.hover = false;
+            drawNode(metaData.hoveredNodeMeta, origin, ctx, {label: true, children: false})
+        }
+
+        if (targetNodeMeta && metaData.hoveredNodeMeta !== targetNodeMeta) {
+            metaData.hoveredNodeMeta = targetNodeMeta;
+            metaData.hoveredNodeMeta.hover = true;
+            drawNode(metaData.hoveredNodeMeta, origin, ctx, {label: true, children: false})
+        }
+
+        if (metaData.hoveredNodeMeta && fnOnHover) {
+            fnOnHover(metaData.hoveredNodeMeta);
+        }
+    }
+
+    function hoverPath(targetNodeMeta, metaData, preserveNode, fnOnHover) {
+        if ('function' === typeof preserveNode) {
+            fnOnHover = preserveNode;
+            preserveNode = false;
+        }
+
+        if (metaData.hoveredNodeMeta && !preserveNode) {
+            hoverNode(null, metaData, true);
+        }
+
+        if (metaData.hoveredPath) {
+            var prevHovered = metaData.hoveredPath.pop();
+            while (prevHovered) {
+                prevHovered.hover = false;
+                drawNode(prevHovered, origin, ctx, {label: true, children: false});
+
+                prevHovered = metaData.hoveredPath.pop();
+            }
+        }
+
+        metaData.hoveredPath = [];
+        while (targetNodeMeta) {
+            targetNodeMeta.hover = true;
+            drawNode(targetNodeMeta, origin, ctx, {label: true, children: false});
+            metaData.hoveredPath.push(targetNodeMeta);
+
+            targetNodeMeta = targetNodeMeta.parent;
+        }
+
+        if (metaData.hoveredPath.length && fnOnHover) {
+            fnOnHover(metaData.hoveredPath);
+        }
+    }
 
     // start
     var canvasRect = canvas.getBoundingClientRect(),
@@ -225,10 +284,9 @@ function sunburst(canvas, data) {
         ctx = canvas.getContext('2d'),
         origin = {x: canvasWidth / 2, y: canvasHeight / 2},
         metaData = calcMetaData(data, widthScale),
-        metaDataFull = metaData,
-        throttleTimeout,
-        prevHoveredNodeMeta,
-        hoveredNodeMeta;
+        throttleTimeout;
+
+    options = options || {};
 
     drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx);
 
@@ -236,20 +294,15 @@ function sunburst(canvas, data) {
         clearTimeout(throttleTimeout);
 
         throttleTimeout = setTimeout(function() {
-            var pointerPos = getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight);
-
-            hoveredNodeMeta = getNodeByCartesianCoords(pointerPos, origin, metaData);
-            if (prevHoveredNodeMeta && prevHoveredNodeMeta !== hoveredNodeMeta) {
-                prevHoveredNodeMeta.hover = false;
-                drawNode(prevHoveredNodeMeta, origin, ctx, {label: true, children: false})
-            }
-
-            if (hoveredNodeMeta && prevHoveredNodeMeta !== hoveredNodeMeta) {
-                hoveredNodeMeta.hover = true;
-                drawNode(hoveredNodeMeta, origin, ctx, {label: true, children: false})
-            }
-
-            prevHoveredNodeMeta = hoveredNodeMeta;
+            var pointerPos = getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight),
+                targetNodeMeta = getNodeByCartesianCoords(pointerPos, origin, metaData);
+                if (targetNodeMeta) {
+                    if (options.hoverPath) {
+                        hoverPath(targetNodeMeta, metaData, options.onHover);
+                    } else {
+                        hoverNode(targetNodeMeta, metaData, options.onHover);
+                    }
+                }
         }, 15);
 
     }, false);
@@ -282,8 +335,6 @@ function sunburst(canvas, data) {
 
         if (targetNode) {
             clearTimeout(throttleTimeout);
-            prevHoveredNodeMeta = null;
-            hoveredNodeMeta = null;
 
             metaData = calcMetaData(targetNode, widthScale);
             drawSunburst(metaData, origin, canvasWidth, canvasHeight, ctx);
@@ -349,4 +400,38 @@ var data = {
     ]
 };
 
-sunburst(document.getElementById('canvas'), data);
+
+var options = {
+    onHover: function(target) {
+        if (!Array.isArray(target)) {
+            target = [target];
+        }
+
+        var container = document.getElementById('hovered'),
+            addButton = document.getElementById('add-node-button'),
+            html = '';
+
+        for (var i = target.length - 1; i >= 0; i--) {
+            html += '<div class="hovered-node" style="background-color:' + target[i].color + '">' +
+                target[i].data.name +
+            '</div>' +
+            '<div class="hovered-node hovered-node-remove" style="background-color:' + target[i].color + '">' +
+                'x' +
+            '</div>';
+        }
+
+        container.innerHTML = html;
+        addButton.innerHTML = 'Add to "' + target[0].data.name + '"';
+
+        document.getElementById('add-node-block').style.display = 'block';
+    }
+};
+sunburst(document.getElementById('canvas'), data, options);
+
+document.getElementById('hover-path-switch').addEventListener('click', function(event) {
+    options.hoverPath = event.target.checked;
+}, false);
+
+document.getElementById('add-node-button').addEventListener('click', function(event) {
+
+}, false);

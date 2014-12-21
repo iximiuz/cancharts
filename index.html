@@ -3,9 +3,31 @@
 <head lang="en">
     <meta charset="UTF-8">
     <title>CanCharts</title>
+
+    <link href="styles.css" rel="stylesheet" />
 </head>
 <body>
-    <canvas id="canvas" width="600" height="600"></canvas>
+    <canvas id="canvas" width="800" height="600" class="canvas"></canvas>
+
+    <div>
+        <div class="options-block">
+            <label>
+                Hover path <input type="checkbox" id="hover-path-switch">
+            </label>
+        </div>
+
+        <div id="hovered" class="hovered-block"></div>
+
+        <div class="add-node-block" id="add-node-block" style="display: none;">
+            <label>
+                Name <input type="text" name="name">
+            </label>
+            <label>
+                Minutes <input type="number" name="minutes">
+            </label>
+            <button class="add-node-button" id="add-node-button"></button>
+        </div>
+    </div>
 
     <script src="cancharts.js"></script>
 </body>

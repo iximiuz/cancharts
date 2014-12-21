@@ -1,0 +1,43 @@
+body {
+    background-color: #34495e;
+}
+
+.canvas {
+    border: 1px solid orange;
+}
+
+.options-block {
+    padding: 10px;
+}
+
+.hovered-block {
+    overflow: hidden;
+    padding: 10px;
+}
+
+.hovered-node {
+    float: left;
+    padding: 5px 10px;
+    color: white;
+    font-family: monospace;
+}
+
+.hovered-node-remove {
+    cursor: pointer;
+    padding: 5px 5px;
+    border-left: 1px solid #310027;
+    margin-right: 2px;
+}
+
+.hovered-node-remove:hover {
+    color: red;
+    font-weight: bold;
+}
+
+.add-node-block {
+    padding: 10px;
+}
+
+.add-node-button {
+
+}
