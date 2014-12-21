@@ -53,12 +53,12 @@ function sunburst(canvas, data) {
         return meta;
     }
 
-    function calcMetaData(data, scale) {
-        var startWidth = rootNodeWidth(canvas, data, scale),
+    function calcMetaData(rootDatum, scale) {
+        var startWidth = rootNodeWidth(canvas, rootDatum, scale),
             meta = {
                 root: {
-                    data: data,
-                    color: pickColor(data),
+                    data: rootDatum,
+                    color: pickColor(rootDatum),
                     angles: {begin: 0, end: 2 * Math.PI, abs: 2 * Math.PI},
                     width: startWidth,
                     offset: 0,
@@ -67,63 +67,65 @@ function sunburst(canvas, data) {
             },
             sibling;
 
-        for (var i = 0, l = (data.children || []).length; i < l; i++) {
-            if (data.children[i].value > data.value) {
-                console.error('Child value greater than parent value.', data.children[i], data);
+        for (var i = 0, l = (rootDatum.children || []).length; i < l; i++) {
+            if (rootDatum.children[i].value > rootDatum.value) {
+                console.error('Child value greater than parent value.', rootDatum.children[i], rootDatum);
                 continue;
             }
 
-            sibling = calcChildMetaData(data.children[i], meta.root, sibling, scale);
+            sibling = calcChildMetaData(rootDatum.children[i], meta.root, sibling, scale);
             meta.root.children.push(sibling);
         }
 
         return meta;
     }
 
-    function drawNode(nodeMeta, x, y, ctx, options) {
+    function drawNode(nodeMeta, origin, ctx, options) {
         options = options || {};
 
         if (options.body || undefined === options.body) {
             nodeMeta.parent
-                ? drawChildNodeBody(nodeMeta, x, y, ctx)
-                : drawRootNodeBody(nodeMeta, x, y, ctx);
+                ? drawChildNodeBody(nodeMeta, origin, ctx)
+                : drawRootNodeBody(nodeMeta, origin, ctx);
         }
 
         if (options.label) {
             nodeMeta.parent
-                ? drawChildNodeLabel(nodeMeta, x, y, ctx)
-                : drawRootNodeLabel(nodeMeta, x, y, ctx);
+                ? drawChildNodeLabel(nodeMeta, origin, ctx)
+                : drawRootNodeLabel(nodeMeta, origin, ctx);
         }
 
-        for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
-            drawNode(nodeMeta.children[i], x, y, ctx, options);
+        if (options.children || undefined == options.children) {
+            for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
+                drawNode(nodeMeta.children[i], origin, ctx, options);
+            }
         }
     }
 
-    function drawRootNodeBody(nodeMeta, x, y, ctx) {
-        ctx.arc(x, y, nodeMeta.width, nodeMeta.angles.begin, nodeMeta.angles.end);
-        ctx.fillStyle = nodeMeta.color;
+    function drawRootNodeBody(nodeMeta, origin, ctx) {
+        ctx.beginPath();
+        ctx.arc(origin.x, origin.y, nodeMeta.width, nodeMeta.angles.begin, nodeMeta.angles.end);
+        ctx.fillStyle = nodeMeta.hover ? 'red' : nodeMeta.color;
         ctx.fill();
-        ctx.stroke();
     }
 
-    function drawRootNodeLabel(nodeMeta, x, y, ctx) {
+    function drawRootNodeLabel(nodeMeta, origin, ctx) {
         ctx.font = '20px Verdana';
         ctx.textAlign = 'center';
         ctx.fillStyle = 'white';
-        ctx.fillText(nodeMeta.data.name, x, y);
+        ctx.fillText(nodeMeta.data.name, origin.x, origin.y);
     }
 
-    function drawChildNodeBody(nodeMeta, x, y, ctx) {
+    function drawChildNodeBody(nodeMeta, origin, ctx) {
         ctx.beginPath();
-        ctx.arc(x, y, nodeMeta.offset + nodeMeta.width / 2, nodeMeta.angles.begin, nodeMeta.angles.end);
+        ctx.arc(origin.x, origin.y, nodeMeta.offset + nodeMeta.width / 2, nodeMeta.angles.begin, nodeMeta.angles.end);
 
         ctx.lineWidth = nodeMeta.width;
-        ctx.strokeStyle = nodeMeta.color;
+        ctx.strokeStyle = nodeMeta.hover ? 'red' : nodeMeta.color;
         ctx.stroke();
     }
 
-    function drawChildNodeLabel(nodeMeta, x, y, ctx) {
+    function drawChildNodeLabel(nodeMeta, origin, ctx) {
         var txtAngle = nodeMeta.angles.begin + nodeMeta.angles.abs / 2,
             xScale = 1;
         if (Math.PI / 2 < txtAngle && txtAngle <= Math.PI) {
@@ -135,7 +137,7 @@ function sunburst(canvas, data) {
         }
 
         ctx.save();
-        ctx.translate(x, y);
+        ctx.translate(origin.x, origin.y);
         ctx.rotate(txtAngle);
         ctx.font = '20px Verdana';
         ctx.textAlign = 'center';
@@ -144,18 +146,97 @@ function sunburst(canvas, data) {
         ctx.restore();
     }
 
-    function drawSunburst(meta, x, y, ctx) {
-        // 1. draw root
-        // 2. for each child draw child
-        //     2.1. draw child itself
-        //     2.2. for each child of child draw it
-        //     2.3. draw remind time as unknown
-
-        drawNode(meta.root, x, y, ctx);                             // draw bodies
-        drawNode(meta.root, x, y, ctx, {body: false, label: true}); // draw labels;
+    function drawSunburst(meta, origin, ctx) {
+        drawNode(meta.root, origin, ctx);                             // draw bodies
+        drawNode(meta.root, origin, ctx, {body: false, label: true}); // draw labels;
     }
 
-    drawSunburst(calcMetaData(data, 1.62), canvas.width / 2, canvas.height / 2, canvas.getContext('2d'));
+    function getNodeByCartesianCoords(point, origin, metaData) {
+        var difX = point.x - origin.x,
+            difY = point.y - origin.y,
+            distance = Math.sqrt(difX * difX + difY * difY),
+            angle = Math.acos(difX / distance);
+
+        if (difY < 0) {
+            angle = 2 * Math.PI - angle;
+        }
+
+        return getNodeByPolarCoords({dist: distance, angle: angle}, metaData);
+    }
+
+    function getNodeByPolarCoords(point, metaData) {
+        // todo: make index by origin offset and angle and use it instead of plain search
+
+        function _findNode(point, nodeMeta) {
+            // first check current node
+            if (nodeMeta.offset >= point.dist) {
+                // too far from origin to be our goal
+                return null;
+            }
+
+            if (nodeMeta.offset < point.dist && point.dist <= nodeMeta.offset + nodeMeta.width) {
+                // level found. Checking angle
+                if (nodeMeta.angles.begin < point.angle && point.angle <= nodeMeta.angles.end) {
+                    return nodeMeta;
+                }
+            } else {
+                // we need to go deeper. Searching in children
+                var node;
+                for (var i = 0, l = (nodeMeta.children || []).length; i < l; i++) {
+                    if (node = _findNode(point, nodeMeta.children[i])) {
+                        return node;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        return _findNode(point, metaData.root);
+    }
+
+    function getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight) {
+        return {
+            x: Math.round((event.clientX - canvasRect.left) / (canvasRect.right - canvasRect.left) * canvasWidth),
+            y: Math.round((event.clientY - canvasRect.top) / (canvasRect.bottom - canvasRect.top) * canvasHeight)
+        };
+    }
+
+
+    // start
+    var canvasRect = canvas.getBoundingClientRect(),
+        canvasWidth = canvas.width,
+        canvasHeight = canvas.height,
+        ctx = canvas.getContext('2d'),
+        origin = {x: canvasWidth / 2, y: canvasHeight / 2},
+        metaData = calcMetaData(data, 1.62),
+        throttleTimeout,
+        prevHoveredNodeMeta,
+        hoveredNodeMeta;
+
+    drawSunburst(metaData, origin, ctx);
+
+    canvas.addEventListener('mousemove', function(event) {
+        clearTimeout(throttleTimeout);
+
+        throttleTimeout = setTimeout(function() {
+            var pointerPos = getCanvasPointerPos(event, canvasRect, canvasWidth, canvasHeight);
+
+            hoveredNodeMeta = getNodeByCartesianCoords(pointerPos, origin, metaData);
+            if (prevHoveredNodeMeta && prevHoveredNodeMeta !== hoveredNodeMeta) {
+                prevHoveredNodeMeta.hover = false;
+                drawNode(prevHoveredNodeMeta, origin, ctx, {label: true, children: false})
+            }
+
+            if (hoveredNodeMeta && prevHoveredNodeMeta !== hoveredNodeMeta) {
+                hoveredNodeMeta.hover = true;
+                drawNode(hoveredNodeMeta, origin, ctx, {label: true, children: false})
+            }
+
+            prevHoveredNodeMeta = hoveredNodeMeta;
+        }, 25);
+
+    }, false);
 }
 
 
