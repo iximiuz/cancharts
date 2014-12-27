@@ -12,10 +12,15 @@ body {
     border: 1px solid orange;
     padding-left: 0;
     padding-right: 0;
-    margin-left: auto;
-    margin-right: auto;
-    display: block;
-    width: 800px;
+}
+
+.data {
+    width: 300px;
+    height: 600px;
+    background-color: black;
+    color: darkgreen;
+    overflow: hidden;
+    padding: 0;
 }
 
 .options-block {

@@ -11,15 +11,17 @@ function demo() {
 
             var html = '', i, l;
             for (i = target.length - 1; i >= 0; i--) {
-                html += '<div><div class="hovered-node" style="background-color:' + target[i].color + '">' +
-                    target[i].data.name + ' (' + target[i].data.value / 60 + ' min)' +
-                '</div>';
+                html += '<div>';
+
+                html += '<div class="hovered-node" style="background-color:' + target[i].color + '">' +
+                    target[i].data.name + ' (' + target[i].data.value / 60 + ' min)' + '</div>';
 
                 if (target[i].parent) {
-                    html += '<div class="hovered-node hovered-node-remove" style="background-color:' + target[i].color + '" data-idx="' + i + '">' +
-                        'x' +
-                    '</div></div>';
+                    html += '<div class="hovered-node hovered-node-remove" style="background-color:' + target[i].color +
+                        '" data-idx="' + i + '">x</div>';
                 }
+
+                html += '</div>';
             }
 
             hoveredContainer.innerHTML = html;
@@ -77,6 +79,9 @@ function demo() {
             } else {
                 addNodeBlock.style.display = 'none';
             }
+        },
+        onRender: function() {
+            document.getElementById('data').value = JSON.stringify(data, undefined, 2);
         }
     };
 
