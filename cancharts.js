@@ -91,6 +91,10 @@ Sunburst.prototype.render = function(rootNode) {
     if (this.options.onHover) {
         this.options.onHover();
     }
+
+    if (this.options.onRender) {
+        this.options.onRender();
+    }
 };
 
 Sunburst.prototype.drawNode = function(nodeMeta, options) {
@@ -182,15 +186,15 @@ Sunburst.prototype.pickColor = (function() {
         colors = ['rgb(86, 135, 209)', 'rgb(123, 97, 92)', 'rgb(222, 120, 59)',
             'rgb(106, 185, 117)', 'rgb(161, 115, 209)', 'rgb(187, 187, 187)'];
 
-    return function(nodeDatum) {
+    return function() {
         return colors[i++ % colors.length];
     }
 })();
 
-Sunburst.prototype.rootNodeWidth = function(rootNode) {
+Sunburst.prototype.rootNodeWidth = function() {
     var canvasSize = Math.min(this.canvasWidth, this.canvasHeight), div = 1;
 
-    for (var i = 1, d = this.deep(rootNode); i < d; i++) {
+    for (var i = 1, d = this.deep(this.rootNode); i < d; i++) {
         div += 1 / Math.pow(this.options.widthScale, i);
     }
 
@@ -198,7 +202,7 @@ Sunburst.prototype.rootNodeWidth = function(rootNode) {
 };
 
 Sunburst.prototype.calcMetaData = function() {
-    var startWidth = this.rootNodeWidth(this.rootNode),
+    var startWidth = this.rootNodeWidth(),
         meta = {
             root: {
                 data: this.rootNode,
