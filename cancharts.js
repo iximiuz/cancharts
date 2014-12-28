@@ -206,7 +206,7 @@ Sunburst.prototype.calcMetaData = function() {
         meta = {
             root: {
                 data: this.rootNode,
-                color: this.pickColor(this.rootNode),
+                color: this.pickColor(),
                 angles: {begin: 0, end: 2 * Math.PI, abs: 2 * Math.PI},
                 width: startWidth,
                 offset: 0,
@@ -219,7 +219,7 @@ Sunburst.prototype.calcMetaData = function() {
     function calcChildMetaData(childDatum, parentMeta, sibling, scale) {
         var meta = {
             data: childDatum,
-            color: self.pickColor(childDatum),
+            color: self.pickColor(),
             parent: parentMeta,
             width: parentMeta.width / scale,
             offset: parentMeta.offset + parentMeta.width,
