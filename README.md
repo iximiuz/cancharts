@@ -40,3 +40,7 @@ Also **mouse hover** available and has two modes: *separate nodes* and *path*.
     onRender   - callback called on every chart render.
     hoverPath  - bool flag for hover mode.
     widthScale - scale for width of every continuous node level. Default value is 1.62.
+
+## License
+
+The software is licensed under the MIT license. See LICENSE-file for details.
