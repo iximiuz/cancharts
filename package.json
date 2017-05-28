@@ -1,0 +1,18 @@
+{
+  "name": "cancharts",
+  "homepage": "http://ostrovski.github.io/cancharts/",
+  "description": "Non-standard charts via JS & HTML5 canvas",
+  "version": "0.2.0",
+  "license": "MIT",
+  "main": "src/canchart.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ostrovski/cancharts.git"
+  },
+  "devDependencies": {
+    "browserify": "^14.4.0"
+  },
+  "dependencies": {
+
+  }
+}

@@ -147,6 +147,6 @@ function demo() {
     };
 
     // start
-    var sunburst = new Sunburst(document.getElementById('canvas'), data, options);
+    var sunburst = new Cancharts.Sunburst(document.getElementById('canvas'), data, options);
     sunburst.render();
 }
