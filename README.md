@@ -1,5 +1,5 @@
 ### Lightweight Sunburst Chart via HTML5 canvas and Javascript
-Example on <a href="http://ostrovski.github.io/cancharts/">github.io</a>.
+Example on <a href="http://iximiuz.github.io/cancharts/">github.io</a>.
 
 It renders typical daily time distribution presented by data like this:
 
